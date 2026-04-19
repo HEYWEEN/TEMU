@@ -18,7 +18,7 @@ enum {
     TK_DEREF, TK_NEG,
 };
 
-#define MAX_TOKENS     128
+#define MAX_TOKENS     512
 #define MAX_TOKEN_STR  32
 
 typedef struct {
