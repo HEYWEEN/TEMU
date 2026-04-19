@@ -27,8 +27,10 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 run: $(TARGET)
 	./$(TARGET)
 
-test:
-	@echo "No tests yet (Stage 0)"
+test: test-expr
+
+test-expr: $(TARGET)
+	@./$(TARGET) -t tests/expr/basic.txt
 
 clean:
 	rm -rf $(BUILD_DIR)

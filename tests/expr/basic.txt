@@ -1,0 +1,79 @@
+# TEMU expression evaluator — basic test cases
+# Format: <expected>  <expression>     (lines starting with # are ignored)
+# <expected> is parsed with strtoul(base=0), so 0x... / 0... are also accepted.
+
+# --- arithmetic ---
+3           1 + 2
+11          1 + 2 * 5
+10          2 * (3 + 2)
+9           (1 + 2) * 3
+8           5 - -3
+14          100 / 7
+2           100 % 7
+16          1 << 4
+1           16 >> 4
+
+# --- unary ---
+0xfffffffb  -5
+0xffffffff  ~0
+1           !0
+0           !5
+0           !!0
+1           !!5
+
+# --- precedence & associativity ---
+7           1 + 2 * 3
+9           (1 + 2) * 3
+11          1 + 2 * 3 + 4
+6           1 + 2 + 3
+2           10 - 5 - 3
+5           100 / 10 / 2
+# shift has lower precedence than +/-
+4           1 + 1 << 1
+# logical && binds tighter than ||
+1           0 || 1 && 0 || 1
+
+# --- relational & equality ---
+1           1 == 1
+0           1 != 1
+1           1 < 2
+0           2 < 1
+1           1 <= 1
+1           2 >= 1
+1           0xff == 255
+
+# --- logical ---
+0           1 && 0
+1           1 && 1
+1           1 || 0
+0           0 || 0
+
+# --- bitwise ---
+255         0xff | 0x00
+170         0xff & 0xaa
+240         0xff ^ 0x0f
+0           0xaa & 0x55
+255         0xaa | 0x55
+
+# --- hex literals ---
+0x1234      0x1234
+0x10        0x10
+16          0x10
+4096        0x1000
+
+# --- registers (all zero at Stage 1) ---
+0           $pc
+0           $x0
+0           $zero
+0           $ra
+0           $sp + $gp
+
+# --- dereference (stub returns 0 in Stage 1) ---
+0           *0x80000000
+0           *($pc)
+
+# --- complex ---
+1           (1 + 2) * 3 == 9
+1           (0xff & 0xaa) == 0xaa
+1           1 + (2 << 1) * 3 == 13
+1           !(1 == 2)
