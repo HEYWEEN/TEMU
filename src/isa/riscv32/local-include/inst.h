@@ -53,4 +53,26 @@ bool pattern_match(uint32_t inst, const char *pat);
 
 void invalid_inst(Decode *s);
 
+/* Snapshot of the most recently decoded instruction. Populated by
+ * isa_exec_once on every matched INSTPAT; consumed by the disassembler
+ * (src/isa/riscv32/disasm.c) to format human-readable output for
+ * itrace dumps and difftest divergence reports. */
+typedef struct {
+    const char    *name;      /* "addi", "bne", ... ; "invalid" on miss */
+    operand_type_t type;
+    uint32_t       inst;
+    vaddr_t        pc;
+    int            rd;
+    int            rs1;
+    int            rs2;
+    word_t         imm;
+} Disasm_info;
+
+extern Disasm_info g_last_disasm;
+
+/* Format a Disasm_info record into buf; returns the number of chars
+ * written (excluding NUL). Caller typically passes &g_last_disasm
+ * which was filled by the most recent isa_exec_once. */
+int  disasm(char *buf, size_t n, const Disasm_info *d);
+
 #endif /* RISCV32_INST_H */

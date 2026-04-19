@@ -4,6 +4,8 @@
 #include "memory.h"
 #include "monitor.h"
 
+#include "../isa/riscv32/local-include/inst.h"
+
 /* ------------------------------------------------------------------ */
 /* Execution state                                                     */
 /* ------------------------------------------------------------------ */
@@ -30,11 +32,13 @@ void temu_set_abort(void) {
 /* Instruction trace: last N {pc, inst} pairs, dumped on abort / end. */
 /* ------------------------------------------------------------------ */
 
-#define ITRACE_SIZE 16
+#define ITRACE_SIZE     16
+#define ITRACE_DISASM   48   /* per-entry formatted-mnemonic buffer */
 
 static struct {
     vaddr_t  pc;
     uint32_t inst;
+    char     disasm[ITRACE_DISASM];
 } itrace_ring[ITRACE_SIZE];
 static uint64_t itrace_head = 0;
 
@@ -42,6 +46,8 @@ static void itrace_record(vaddr_t pc, uint32_t inst) {
     size_t idx = (size_t)(itrace_head % ITRACE_SIZE);
     itrace_ring[idx].pc   = pc;
     itrace_ring[idx].inst = inst;
+    /* g_last_disasm was populated by the just-completed isa_exec_once. */
+    disasm(itrace_ring[idx].disasm, ITRACE_DISASM, &g_last_disasm);
     itrace_head++;
 }
 
@@ -51,8 +57,10 @@ static void itrace_dump(void) {
     fprintf(stderr, "--- itrace (last %" PRIu64 " instructions) ---\n", count);
     for (uint64_t i = 0; i < count; i++) {
         size_t idx = (size_t)((start + i) % ITRACE_SIZE);
-        fprintf(stderr, "  0x%08" PRIx32 ":  %08" PRIx32 "\n",
-                itrace_ring[idx].pc, itrace_ring[idx].inst);
+        fprintf(stderr, "  0x%08" PRIx32 ":  %08" PRIx32 "  %s\n",
+                itrace_ring[idx].pc,
+                itrace_ring[idx].inst,
+                itrace_ring[idx].disasm);
     }
 }
 
@@ -67,9 +75,12 @@ static void exec_once(void) {
     s.dnpc = s.snpc;
     s.inst = (uint32_t)paddr_read(s.pc, 4);
 
-    itrace_record(s.pc, s.inst);
-
     isa_exec_once(&s);
+
+    /* Record after execute so g_last_disasm (populated by the INSTPAT
+     * that matched) has the current instruction's data, not the
+     * previous one's. */
+    itrace_record(s.pc, s.inst);
 
     /* Only advance PC if the instruction completed normally. On END or
      * ABORT we leave cpu.pc pointing at the offending / halt

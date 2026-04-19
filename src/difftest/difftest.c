@@ -21,6 +21,8 @@
 #include "difftest.h"
 #include "memory.h"
 
+#include "../isa/riscv32/local-include/inst.h"
+
 /* ------------------------------------------------------------------ */
 /* Reference-side state                                                */
 /* ------------------------------------------------------------------ */
@@ -297,8 +299,12 @@ void difftest_step(void) {
     }
 
     if (mismatch) {
+        char buf[64];
+        disasm(buf, sizeof buf, &g_last_disasm);
         fprintf(stderr,
-                "\33[1;31mdifftest: CPU state diverged from reference\33[0m\n");
+                "\33[1;31mdifftest: CPU state diverged from reference\33[0m\n"
+                "  last instruction: 0x%08" PRIx32 "  %s\n",
+                g_last_disasm.inst, buf);
         temu_set_abort();
     }
 }
