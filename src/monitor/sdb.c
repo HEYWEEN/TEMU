@@ -53,13 +53,25 @@ static int cmd_q(char *args) {
 
 static int cmd_c(char *args) {
     (void)args;
-    printf("'c' is not implemented yet (needs Stage 3 cpu_exec)\n");
+    cpu_exec((uint64_t)-1);
     return 0;
 }
 
 static int cmd_si(char *args) {
-    (void)args;
-    printf("'si' is not implemented yet (needs Stage 3 cpu_exec)\n");
+    uint64_t n = 1;
+    if (args != NULL) {
+        char *tok = strtok(args, " \t");
+        if (tok != NULL) {
+            char *end;
+            long v = strtol(tok, &end, 0);
+            if (*end != '\0' || v <= 0) {
+                printf("si: bad count '%s'\n", tok);
+                return 0;
+            }
+            n = (uint64_t)v;
+        }
+    }
+    cpu_exec(n);
     return 0;
 }
 

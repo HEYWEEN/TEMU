@@ -122,9 +122,12 @@ int main(int argc, char *argv[]) {
     }
 
     if (batch_mode) {
-        printf("[batch mode] image=%s (CPU execution lands in Stage 3)\n",
-               image_file ? image_file : "<none>");
-        return 0;
+        cpu_exec((uint64_t)-1);
+        switch (temu_state()) {
+            case TEMU_END:   return 0;
+            case TEMU_ABORT: return 1;
+            default:         return 2;   /* shouldn't reach here after infinite cpu_exec */
+        }
     }
 
     sdb_mainloop();
