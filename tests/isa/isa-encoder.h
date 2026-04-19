@@ -66,6 +66,18 @@ static inline uint32_t btype(int32_t imm, uint32_t rs2, uint32_t rs1,
             (op  & 0x7f);
 }
 
+/* S-type: imm[11:5] rs2 rs1 f3 imm[4:0] opcode. */
+static inline uint32_t stype(int32_t imm, uint32_t rs2, uint32_t rs1,
+                             uint32_t f3, uint32_t op) {
+    uint32_t i = (uint32_t)imm;
+    return (((i >> 5) & 0x7f) << 25) |
+           ((rs2 & 0x1f)      << 20) |
+           ((rs1 & 0x1f)      << 15) |
+           ((f3  & 0x07)      << 12) |
+           ((i   & 0x1f)      <<  7) |
+            (op  & 0x7f);
+}
+
 /* J-type: imm[20|10:1|11|19:12] rd opcode. imm[0] implicit zero. */
 static inline uint32_t jtype(int32_t imm, uint32_t rd, uint32_t op) {
     uint32_t i = (uint32_t)imm;
@@ -120,6 +132,22 @@ static inline uint32_t jtype(int32_t imm, uint32_t rd, uint32_t op) {
 #define JAL(rd, imm)         jtype(imm, rd, 0x6f)
 #define JALR(rd, rs1, imm)   itype(imm, rs1, 0x0, rd, 0x67)
 #define J(imm)               JAL(ZERO, imm)     /* plain jump */
+
+/* Loads (I-type, opcode 0x03). rd <- mem[rs1 + imm]. */
+#define LB(rd, rs1, imm)     itype(imm, rs1, 0x0, rd, 0x03)
+#define LH(rd, rs1, imm)     itype(imm, rs1, 0x1, rd, 0x03)
+#define LW(rd, rs1, imm)     itype(imm, rs1, 0x2, rd, 0x03)
+#define LBU(rd, rs1, imm)    itype(imm, rs1, 0x4, rd, 0x03)
+#define LHU(rd, rs1, imm)    itype(imm, rs1, 0x5, rd, 0x03)
+
+/* Stores (S-type, opcode 0x23). mem[rs1 + imm] <- rs2. */
+#define SB(rs2, rs1, imm)    stype(imm, rs2, rs1, 0x0, 0x23)
+#define SH(rs2, rs1, imm)    stype(imm, rs2, rs1, 0x1, 0x23)
+#define SW(rs2, rs1, imm)    stype(imm, rs2, rs1, 0x2, 0x23)
+
+/* FENCE / FENCE.I — opcode 0x0f. Treated as NOP by TEMU. */
+#define FENCE                itype(0, 0, 0x0, 0, 0x0f)
+#define FENCE_I              itype(0, 0, 0x1, 0, 0x0f)
 
 /* Pseudoinstructions built from the above. MV is ADDI with imm=0. */
 #define MV(rd, rs)           ADDI(rd, rs, 0)

@@ -222,6 +222,76 @@ static void test_x0_hardwired(void) {
     JAL(ZERO, 8),                      \
     ADDI(A0, ZERO, 88)
 
+static void test_load_store(void) {
+    /* Scratch pmem slot. LUI fills bits [31:12]; low 12 bits are zero,
+     * so t0 = 0x80001000 exactly — well inside pmem (PMEM_BASE + 4KB). */
+    #define SCRATCH LUI(T0, 0x80001000)
+
+    /* SW then LW: full 32-bit round-trip. Build 0x01020304 with
+     * LUI(0x01020000) + ADDI(0x304); bit 11 of 0x304 is zero so the
+     * ADDI is a simple positive addition. */
+    TEST("sw + lw", 0x01020304u,
+         SCRATCH,
+         LUI(T1, 0x01020000),
+         ADDI(T1, T1, 0x304),
+         SW(T1, T0, 0),
+         LW(A0, T0, 0));
+
+    /* SB + LB: byte 0xff sign-extends to 0xffffffff. */
+    TEST("sb + lb sign ext", 0xffffffffu,
+         SCRATCH,
+         ADDI(T1, ZERO, -1),        /* t1 = 0xffffffff */
+         SB(T1, T0, 0),
+         LB(A0, T0, 0));
+
+    /* SB + LBU: same byte, zero-extended stays 0xff. */
+    TEST("sb + lbu zero ext", 0xffu,
+         SCRATCH,
+         ADDI(T1, ZERO, -1),
+         SB(T1, T0, 4),             /* different offset; each test
+                                        shares the same scratch word */
+         LBU(A0, T0, 4));
+
+    /* SH + LH: write 0x8000 (bit 15 set), LH sign-extends to
+     * 0xffff8000. */
+    TEST("sh + lh sign ext", 0xffff8000u,
+         SCRATCH,
+         LUI(T1, 0x00008000),       /* t1 = 0x00008000 — bit 15 set */
+         SH(T1, T0, 8),
+         LH(A0, T0, 8));
+
+    /* SH + LHU: same halfword, zero-extended stays 0x8000. */
+    TEST("sh + lhu zero ext", 0x8000u,
+         SCRATCH,
+         LUI(T1, 0x00008000),
+         SH(T1, T0, 12),
+         LHU(A0, T0, 12));
+
+    /* SB at offsets 0..3, then LW to confirm little-endian packing.
+     * Each byte value fits positively in 12-bit signed so ADDI works
+     * directly. */
+    TEST("sb little-endian pack", 0xddccbbaau,
+         SCRATCH,
+         ADDI(T1, ZERO, 0xaa),
+         SB(T1, T0, 16),
+         ADDI(T1, ZERO, 0xbb),
+         SB(T1, T0, 17),
+         ADDI(T1, ZERO, 0xcc),
+         SB(T1, T0, 18),
+         ADDI(T1, ZERO, 0xdd),
+         SB(T1, T0, 19),
+         LW(A0, T0, 16));
+
+    /* FENCE / FENCE.I — pure NOPs. Put them between an ADDI sequence
+     * and verify they don't disturb the result. */
+    TEST("fence is nop", 42,
+         ADDI(A0, ZERO, 42),
+         FENCE,
+         FENCE_I);
+
+    #undef SCRATCH
+}
+
 static void test_branches(void) {
     TEST("beq taken",     88,
          /* 0==0 → taken */
@@ -309,6 +379,7 @@ int main(int argc, char *argv[]) {
     test_x0_hardwired();
     test_branches();
     test_jumps();
+    test_load_store();
 
     printf("isa tests: %d passed, %d failed\n", pass_count, fail_count);
     return fail_count == 0 ? 0 : 1;
