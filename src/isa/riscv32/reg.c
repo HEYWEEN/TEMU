@@ -1,6 +1,12 @@
 #include "cpu.h"
+#include "memory.h"
 
 CPU_state cpu = { .gpr = {0}, .pc = 0 };
+
+void cpu_init(void) {
+    memset(cpu.gpr, 0, sizeof cpu.gpr);
+    cpu.pc = RESET_VECTOR;
+}
 
 static const char *reg_abi[32] = {
     "zero", "ra", "sp",  "gp",  "tp",  "t0", "t1", "t2",

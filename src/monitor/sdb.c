@@ -172,7 +172,12 @@ static int cmd_d(char *args) {
 
 static void banner(void) {
     printf("TEMU — TErminal Machine Emulator (RV32I)\n");
-    printf("Stage 1: debugger REPL. Type 'help' for commands, 'q' to quit.\n");
+    printf("pmem: 0x%08" PRIx32 " .. 0x%08" PRIx32 " (%d MB)\n",
+           (paddr_t)PMEM_BASE,
+           (paddr_t)(PMEM_BASE + PMEM_SIZE),
+           PMEM_SIZE / (1024 * 1024));
+    printf("pc:   0x%08" PRIx32 "\n", cpu.pc);
+    printf("Type 'help' for commands, 'q' to quit.\n");
 }
 
 void sdb_mainloop(void) {

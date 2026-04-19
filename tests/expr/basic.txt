@@ -61,12 +61,14 @@
 16          0x10
 4096        0x1000
 
-# --- registers (all zero at Stage 1) ---
-0           $pc
+# --- registers (post-cpu_init: $pc = RESET_VECTOR, GPRs = 0) ---
+0x80000000  $pc
 0           $x0
 0           $zero
 0           $ra
 0           $sp + $gp
+1           $pc == 0x80000000
+0x80000004  $pc + 4
 
 # --- dereference (stub returns 0 in Stage 1) ---
 0           *0x80000000

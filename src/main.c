@@ -2,6 +2,8 @@
 #include <unistd.h>
 
 #include "common.h"
+#include "cpu.h"
+#include "memory.h"
 #include "monitor.h"
 
 static int         batch_mode = 0;
@@ -97,14 +99,31 @@ int main(int argc, char *argv[]) {
     int r = parse_args(argc, argv);
     if (r != 0) return r < 0 ? 1 : 0;
 
+    if (log_file != NULL) {
+        if (freopen(log_file, "w", stderr) == NULL) {
+            fprintf(stderr, "cannot open log file '%s'\n", log_file);
+            return 1;
+        }
+    }
+
+    cpu_init();
+
     if (test_file != NULL) {
+        /* Tests run against the post-cpu_init state: PC = RESET_VECTOR,
+         * pmem all-zero. No image is loaded so *EXPR against a valid
+         * in-pmem address returns zero. */
         return run_expr_tests(test_file);
     }
 
+    if (image_file != NULL) {
+        load_img(image_file);
+    } else {
+        Log("no image provided; pmem starts as all-zero bytes");
+    }
+
     if (batch_mode) {
-        printf("[batch mode] image=%s log=%s (CPU not yet implemented)\n",
-               image_file ? image_file : "<none>",
-               log_file   ? log_file   : "<none>");
+        printf("[batch mode] image=%s (CPU execution lands in Stage 3)\n",
+               image_file ? image_file : "<none>");
         return 0;
     }
 
