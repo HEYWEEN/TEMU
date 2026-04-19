@@ -254,6 +254,28 @@ static void test_serial_hello(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Program 6: timer monotonicity. Read the microsecond counter twice  *
+ * and confirm the second read is >= the first. Returns 1 on success, *
+ * 0 on failure — so a pass is halt_ret == 1 regardless of how much   *
+ * real time actually elapsed (the delta may well be zero on a fast   *
+ * host).                                                             */
+/* ------------------------------------------------------------------ */
+static void test_timer_monotonic(void) {
+    RUN("timer monotonic", 1,
+        /* t2 = 0xa0000048 (timer low word) */
+        LUI(T2, 0xa0000000),
+        ADDI(T2, T2, 0x48),
+
+        LW(T0, T2, 0),                 /* first read          */
+        LW(T1, T2, 0),                 /* second read         */
+
+        BGEU(T1, T0, 12),              /* if t1 >= t0, skip fail arm */
+        ADDI(A0, ZERO, 0),
+        JAL(ZERO, 8),
+        ADDI(A0, ZERO, 1));
+}
+
+/* ------------------------------------------------------------------ */
 
 int main(int argc, char *argv[]) {
     temu_path = (argc > 1) ? argv[1] : "./build/temu";
@@ -264,6 +286,7 @@ int main(int argc, char *argv[]) {
     test_recursive_fib();
     test_array_sum();
     test_serial_hello();
+    test_timer_monotonic();
 
     printf("program tests: %d passed, %d failed\n", pass_count, fail_count);
     return fail_count == 0 ? 0 : 1;

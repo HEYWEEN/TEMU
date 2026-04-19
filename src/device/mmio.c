@@ -48,7 +48,9 @@ void mmio_access(paddr_t addr, int len, bool is_write, word_t *data) {
 /* Device init hooks. Each device implements its own init_<name>() in
  * src/device/<name>.c and is listed here. */
 void init_serial(void);
+void init_timer(void);
 
 void init_devices(void) {
     init_serial();
+    init_timer();
 }
