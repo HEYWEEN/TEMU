@@ -13,7 +13,7 @@ SRCS := $(shell find $(SRC_DIR) -name '*.c')
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 DEPS := $(OBJS:.o=.d)
 
-.PHONY: all clean run test test-expr test-expr-fuzz test-pmem test-isa test-prog tools
+.PHONY: all clean run test test-expr test-expr-fuzz test-pmem test-isa test-prog test-diff tools
 
 all: $(TARGET)
 
@@ -60,6 +60,13 @@ test-isa: $(TARGET) $(ISATEST)
 
 test-prog: $(TARGET) $(PROGTEST)
 	@$(PROGTEST) $(TARGET)
+
+# Re-run isa + program tests with differential testing enabled. The
+# reference CPU in src/difftest/difftest.c lock-steps with the main
+# ISA implementation; any divergence aborts the offending case.
+test-diff: $(TARGET) $(ISATEST) $(PROGTEST)
+	@TEMU_DIFFTEST=1 $(ISATEST)  $(TARGET)
+	@TEMU_DIFFTEST=1 $(PROGTEST) $(TARGET)
 
 clean:
 	rm -rf $(BUILD_DIR)

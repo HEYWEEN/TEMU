@@ -3,10 +3,12 @@
 
 #include "common.h"
 #include "cpu.h"
+#include "difftest.h"
 #include "memory.h"
 #include "monitor.h"
 
 static int         batch_mode = 0;
+static int         diff_mode  = 0;
 static const char *log_file   = NULL;
 static const char *image_file = NULL;
 static const char *test_file  = NULL;
@@ -14,6 +16,7 @@ static const char *test_file  = NULL;
 static void print_usage(const char *prog) {
     printf("Usage: %s [OPTION]... [IMAGE]\n", prog);
     printf("  -b           run in batch mode (no REPL)\n");
+    printf("  -d           enable differential testing against the reference CPU\n");
     printf("  -l FILE      write log to FILE\n");
     printf("  -t FILE      run expression tests from FILE and exit\n");
     printf("  -h           show this help and exit\n");
@@ -21,10 +24,11 @@ static void print_usage(const char *prog) {
 
 static int parse_args(int argc, char *argv[]) {
     int opt;
-    while ((opt = getopt(argc, argv, "hbl:t:")) != -1) {
+    while ((opt = getopt(argc, argv, "hbdl:t:")) != -1) {
         switch (opt) {
             case 'h': print_usage(argv[0]); return 1;
             case 'b': batch_mode = 1; break;
+            case 'd': diff_mode  = 1; break;
             case 'l': log_file  = optarg; break;
             case 't': test_file = optarg; break;
             default:  print_usage(argv[0]); return -1;
@@ -119,6 +123,11 @@ int main(int argc, char *argv[]) {
         load_img(image_file);
     } else {
         Log("no image provided; pmem starts as all-zero bytes");
+    }
+
+    if (diff_mode) {
+        difftest_enable(true);
+        difftest_init();
     }
 
     if (batch_mode) {

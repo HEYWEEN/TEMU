@@ -23,6 +23,7 @@
 
 static int  pass_count = 0;
 static int  fail_count = 0;
+static bool difftest   = false;
 static const char *temu_path;
 
 static void check(const char *name, uint32_t expected_ret,
@@ -37,7 +38,8 @@ static void check(const char *name, uint32_t expected_ret,
     close(fd);
 
     char cmd[512];
-    snprintf(cmd, sizeof cmd, "%s -b %s 2>/dev/null", temu_path, path);
+    snprintf(cmd, sizeof cmd, "%s -b%s %s 2>/dev/null",
+             temu_path, difftest ? "d" : "", path);
     FILE *pipe = popen(cmd, "r");
     if (pipe == NULL) { perror("popen"); unlink(path); exit(2); }
 
@@ -213,6 +215,7 @@ static void test_array_sum(void) {
 
 int main(int argc, char *argv[]) {
     temu_path = (argc > 1) ? argv[1] : "./build/temu";
+    if (getenv("TEMU_DIFFTEST")) difftest = true;
 
     test_iterative_fib();
     test_sum_1_to_n();

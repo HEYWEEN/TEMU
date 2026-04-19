@@ -1,5 +1,6 @@
 #include "common.h"
 #include "cpu.h"
+#include "difftest.h"
 #include "memory.h"
 #include "monitor.h"
 
@@ -77,6 +78,13 @@ static void exec_once(void) {
         cpu.pc = s.dnpc;
     }
     cpu.gpr[0] = 0;   /* x0 is hard-wired to zero */
+
+    /* Difftest compares against the reference CPU. Skip on abort so
+     * the ref does not re-emit confusing errors for the same
+     * instruction the main side already rejected. */
+    if (difftest_is_enabled() && g.state != TEMU_ABORT) {
+        difftest_step();
+    }
 }
 
 void cpu_exec(uint64_t n) {
