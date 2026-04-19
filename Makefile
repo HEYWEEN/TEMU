@@ -6,12 +6,13 @@ SRC_DIR   := src
 BUILD_DIR := build
 TARGET    := $(BUILD_DIR)/temu
 GENEXPR   := $(BUILD_DIR)/tools/gen-expr/gen-expr
+ISATEST   := $(BUILD_DIR)/tests/isa/isa
 
 SRCS := $(shell find $(SRC_DIR) -name '*.c')
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 DEPS := $(OBJS:.o=.d)
 
-.PHONY: all clean run test test-expr test-expr-fuzz test-pmem tools
+.PHONY: all clean run test test-expr test-expr-fuzz test-pmem test-isa tools
 
 all: $(TARGET)
 
@@ -20,6 +21,10 @@ tools: $(GENEXPR)
 $(GENEXPR): tools/gen-expr/gen-expr.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $< -o $@
+
+$(ISATEST): tests/isa/isa.c tests/isa/isa-encoder.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) tests/isa/isa.c -o $@
 
 $(TARGET): $(OBJS)
 	@mkdir -p $(dir $@)
@@ -34,7 +39,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 run: $(TARGET)
 	./$(TARGET)
 
-test: test-expr test-pmem
+test: test-expr test-pmem test-isa
 
 test-expr: $(TARGET)
 	@./$(TARGET) -t tests/expr/basic.txt
@@ -44,6 +49,9 @@ test-expr-fuzz: $(TARGET) $(GENEXPR)
 
 test-pmem: $(TARGET)
 	@./tests/pmem/load.sh
+
+test-isa: $(TARGET) $(ISATEST)
+	@$(ISATEST) $(TARGET)
 
 clean:
 	rm -rf $(BUILD_DIR)
