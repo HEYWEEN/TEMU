@@ -17,9 +17,17 @@ bool in_pmem(paddr_t addr);
  * larger than PMEM_SIZE. */
 long load_img(const char *path);
 
-/* Physical-address read / write. `len` must be 1, 2, or 4. Panics on
- * out-of-bound access. */
+/* Physical-address read / write. `len` must be 1, 2, or 4. Accesses
+ * are routed to pmem[] if the address is in-range, otherwise to the
+ * MMIO table registered by src/device/. Out-of-bound + un-mapped
+ * accesses panic. */
 word_t paddr_read(paddr_t addr, int len);
 void   paddr_write(paddr_t addr, int len, word_t data);
+
+/* Set to true by paddr_read/write whenever the access was served by
+ * MMIO rather than pmem. Difftest reads + clears this flag after each
+ * main-side instruction so the reference CPU can be skipped on
+ * side-effecting MMIO steps. */
+extern bool paddr_touched_mmio;
 
 #endif /* MEMORY_H */

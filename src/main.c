@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "cpu.h"
+#include "device.h"
 #include "difftest.h"
 #include "memory.h"
 #include "monitor.h"
@@ -111,6 +112,7 @@ int main(int argc, char *argv[]) {
     }
 
     cpu_init();
+    init_devices();
 
     if (test_file != NULL) {
         /* Tests run against the post-cpu_init state: PC = RESET_VECTOR,

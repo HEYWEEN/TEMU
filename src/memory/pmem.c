@@ -1,10 +1,13 @@
 #include "common.h"
+#include "device.h"
 #include "memory.h"
 
 /* 128 MB of guest physical DRAM, lived in the host binary's .bss. The
  * static lifetime means there is never a "before allocation" state —
  * every stage above this one can assume pmem is ready to touch. */
 static uint8_t pmem[PMEM_SIZE];
+
+bool paddr_touched_mmio = false;
 
 static inline uint8_t *guest_to_host(paddr_t addr) {
     return pmem + (addr - PMEM_BASE);
@@ -14,22 +17,46 @@ bool in_pmem(paddr_t addr) {
     return addr >= PMEM_BASE && addr < PMEM_BASE + PMEM_SIZE;
 }
 
-word_t paddr_read(paddr_t addr, int len) {
-    Assert(len == 1 || len == 2 || len == 4,
-           "paddr_read: bad length %d", len);
-    Assert(in_pmem(addr) && in_pmem(addr + (paddr_t)len - 1),
-           "paddr_read out of bound: addr=0x%08" PRIx32 " len=%d", addr, len);
+static word_t pmem_read(paddr_t addr, int len) {
     word_t ret = 0;
     memcpy(&ret, guest_to_host(addr), (size_t)len);
     return ret;
 }
 
+static void pmem_write(paddr_t addr, int len, word_t data) {
+    memcpy(guest_to_host(addr), &data, (size_t)len);
+}
+
+word_t paddr_read(paddr_t addr, int len) {
+    Assert(len == 1 || len == 2 || len == 4,
+           "paddr_read: bad length %d", len);
+
+    if (in_pmem(addr) && in_pmem(addr + (paddr_t)len - 1)) {
+        return pmem_read(addr, len);
+    }
+    if (mmio_in_range(addr)) {
+        word_t data = 0;
+        mmio_access(addr, len, false, &data);
+        paddr_touched_mmio = true;
+        return data;
+    }
+    panic("paddr_read out of bound: addr=0x%08" PRIx32 " len=%d", addr, len);
+}
+
 void paddr_write(paddr_t addr, int len, word_t data) {
     Assert(len == 1 || len == 2 || len == 4,
            "paddr_write: bad length %d", len);
-    Assert(in_pmem(addr) && in_pmem(addr + (paddr_t)len - 1),
-           "paddr_write out of bound: addr=0x%08" PRIx32 " len=%d", addr, len);
-    memcpy(guest_to_host(addr), &data, (size_t)len);
+
+    if (in_pmem(addr) && in_pmem(addr + (paddr_t)len - 1)) {
+        pmem_write(addr, len, data);
+        return;
+    }
+    if (mmio_in_range(addr)) {
+        mmio_access(addr, len, true, &data);
+        paddr_touched_mmio = true;
+        return;
+    }
+    panic("paddr_write out of bound: addr=0x%08" PRIx32 " len=%d", addr, len);
 }
 
 long load_img(const char *path) {

@@ -18,8 +18,8 @@
 
 #include "common.h"
 #include "cpu.h"
-#include "memory.h"
 #include "difftest.h"
+#include "memory.h"
 
 /* ------------------------------------------------------------------ */
 /* Reference-side state                                                */
@@ -258,6 +258,18 @@ void difftest_init(void) {
 
 void difftest_step(void) {
     if (!enabled) return;
+
+    /* If the main-side instruction just touched MMIO, the operation
+     * had an observable side effect (e.g. putchar) or yielded a time-
+     * varying read (timer). Replaying it on the reference CPU would
+     * either duplicate the side effect or diverge on a benign
+     * difference. Instead, snapshot the main CPU onto ref_cpu so the
+     * two stay aligned going forward, and skip this step's compare. */
+    if (paddr_touched_mmio) {
+        memcpy(&ref_cpu, &cpu, sizeof(CPU_state));
+        paddr_touched_mmio = false;
+        return;
+    }
 
     ref_exec_one();
 

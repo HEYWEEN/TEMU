@@ -27,6 +27,7 @@ static bool difftest   = false;
 static const char *temu_path;
 
 static void check(const char *name, uint32_t expected_ret,
+                  const char *expected_substr,
                   const uint32_t *prog, size_t n) {
     char path[] = "/tmp/temu-prog-XXXXXX";
     int  fd = mkstemp(path);
@@ -37,19 +38,26 @@ static void check(const char *name, uint32_t expected_ret,
     }
     close(fd);
 
+    /* 2>&1: program stdout (serial putchar) and temu's own status
+     * lines are both captured into `pipe`. We search each line for
+     * both the halt_ret marker and the optional expected substring. */
     char cmd[512];
-    snprintf(cmd, sizeof cmd, "%s -b%s %s 2>/dev/null",
+    snprintf(cmd, sizeof cmd, "%s -b%s %s 2>&1",
              temu_path, difftest ? "d" : "", path);
     FILE *pipe = popen(cmd, "r");
     if (pipe == NULL) { perror("popen"); unlink(path); exit(2); }
 
     char line[512];
     bool     found = false, aborted = false;
+    bool     substr_found = (expected_substr == NULL);
     uint32_t got = 0;
     while (fgets(line, sizeof line, pipe)) {
         if (strstr(line, "HIT ABORT"))   aborted = true;
         const char *m = strstr(line, "halt_ret=0x");
         if (m) { got = (uint32_t)strtoul(m + 11, NULL, 16); found = true; }
+        if (expected_substr && strstr(line, expected_substr)) {
+            substr_found = true;
+        }
     }
     int rc = pclose(pipe);
     unlink(path);
@@ -64,6 +72,10 @@ static void check(const char *name, uint32_t expected_ret,
         printf("  %-32s FAIL (got 0x%08x, expected 0x%08x)\n",
                name, got, expected_ret);
         fail_count++;
+    } else if (!substr_found) {
+        printf("  %-32s FAIL (stdout did not contain '%s')\n",
+               name, expected_substr);
+        fail_count++;
     } else {
         pass_count++;
     }
@@ -71,7 +83,13 @@ static void check(const char *name, uint32_t expected_ret,
 
 #define RUN(name, expected, ...) do {                        \
     uint32_t prog_[] = { __VA_ARGS__, EBREAK };              \
-    check(name, (uint32_t)(expected),                        \
+    check(name, (uint32_t)(expected), NULL,                  \
+          prog_, sizeof prog_ / sizeof prog_[0]);            \
+} while (0)
+
+#define RUN_OUT(name, expected, out_substr, ...) do {        \
+    uint32_t prog_[] = { __VA_ARGS__, EBREAK };              \
+    check(name, (uint32_t)(expected), (out_substr),          \
           prog_, sizeof prog_ / sizeof prog_[0]);            \
 } while (0)
 
@@ -212,6 +230,30 @@ static void test_array_sum(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Program 5: serial "hello\n" — exercises MMIO. The loop writes each  *
+ * character of the string to the serial register at 0xa00003f8.       *
+ *                                                                     */
+/* a0 holds the SERIAL address after the LUI+ADDI; subsequent SB       *
+ * stores drop the low byte onto stdout. We clear a0 back to zero      *
+ * before EBREAK so halt_ret is a tidy 0.                              *
+ * ------------------------------------------------------------------ */
+static void test_serial_hello(void) {
+    RUN_OUT("serial hello", 0, "hello",
+        /* a0 = 0xa00003f8 */
+        LUI(A0, 0xa0000000),
+        ADDI(A0, A0, 0x3f8),
+        /* h e l l o \n */
+        ADDI(T0, ZERO, 'h'), SB(T0, A0, 0),
+        ADDI(T0, ZERO, 'e'), SB(T0, A0, 0),
+        ADDI(T0, ZERO, 'l'), SB(T0, A0, 0),
+        ADDI(T0, ZERO, 'l'), SB(T0, A0, 0),
+        ADDI(T0, ZERO, 'o'), SB(T0, A0, 0),
+        ADDI(T0, ZERO, '\n'), SB(T0, A0, 0),
+        /* clean halt_ret */
+        ADDI(A0, ZERO, 0));
+}
+
+/* ------------------------------------------------------------------ */
 
 int main(int argc, char *argv[]) {
     temu_path = (argc > 1) ? argv[1] : "./build/temu";
@@ -221,6 +263,7 @@ int main(int argc, char *argv[]) {
     test_sum_1_to_n();
     test_recursive_fib();
     test_array_sum();
+    test_serial_hello();
 
     printf("program tests: %d passed, %d failed\n", pass_count, fail_count);
     return fail_count == 0 ? 0 : 1;
