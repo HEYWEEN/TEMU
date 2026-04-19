@@ -45,16 +45,24 @@
 
 ---
 
-## Stage 文档列表
+## 文档列表
+
+### 上手指南
+
+| 文档 | 内容 |
+|------|------|
+| [playground.md](playground.md) | **"怎么玩"**：克隆下来后，REPL 游、手写程序、看 difftest 抓 bug、fuzz、源码 tour |
+
+### Stage 文档
 
 | Stage | 文件 | 状态 |
 |-------|------|------|
 | 0 | [stage-0-skeleton.md](stage-0-skeleton.md) | ✅ 已完成 |
-| 1 | [stage-1-monitor.md](stage-1-monitor.md) | ⏳ 待实现 |
-| 2 | [stage-2-memory-cpu.md](stage-2-memory-cpu.md) | 📝 设计稿 |
-| 3 | [stage-3-rv32i.md](stage-3-rv32i.md) | 📝 设计稿 |
-| 4 | [stage-4-difftest.md](stage-4-difftest.md) | 📝 设计稿 |
-| 5 | [stage-5-mmio.md](stage-5-mmio.md) | 📝 设计稿 |
+| 1 | [stage-1-monitor.md](stage-1-monitor.md) | ✅ 已完成 |
+| 2 | [stage-2-memory-cpu.md](stage-2-memory-cpu.md) | ✅ 已完成 |
+| 3 | [stage-3-rv32i.md](stage-3-rv32i.md) | ✅ 已完成 |
+| 4 | [stage-4-difftest.md](stage-4-difftest.md) | ✅ 已完成 |
+| 5 | [stage-5-mmio.md](stage-5-mmio.md) | ✅ 已完成 |
 | 6 | [stage-6-os.md](stage-6-os.md) | 📝 可选 |
 
-> **说明**：「设计稿」表示文档已勾出动机、关键概念、API 草案与验收标准，但实现细节会在该 stage 真正开始时进一步细化——避免提前写出与最终代码不一致的内容。
+> 各 stage 文档记录了**动机与设计思路**，是教科书式的"为什么这样做"；想知道**现在这台模拟器怎么用**，从 [playground.md](playground.md) 开始。

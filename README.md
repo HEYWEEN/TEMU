@@ -37,12 +37,14 @@ struct computer {
 | Stage | 状态 | 目标 | 验收 | 详细说明 |
 |-------|------|------|------|----------|
 | 0 | ✅ | 骨架 + REPL | `make run` 进入提示符，`q` 干净退出 | [stage-0-skeleton.md](docs/stage-0-skeleton.md) |
-| 1 | ⏳ | Monitor / 调试器 + 表达式求值器 | `make test-expr` 全绿 | [stage-1-monitor.md](docs/stage-1-monitor.md) |
-| 2 |   | 物理内存 + 寄存器 + PC | `info r` 打印 32 个寄存器 | [stage-2-memory-cpu.md](docs/stage-2-memory-cpu.md) |
-| 3 |   | RV32I 指令解码与执行 | `fib.c` 跑通 | [stage-3-rv32i.md](docs/stage-3-rv32i.md) |
-| 4 |   | Difftest 差分测试 | 与 Spike 比对 10k 条指令无差异 | [stage-4-difftest.md](docs/stage-4-difftest.md) |
-| 5 |   | MMIO 设备（串口、定时器）| 能跑打印 "hello" 的程序 | [stage-5-mmio.md](docs/stage-5-mmio.md) |
+| 1 | ✅ | Monitor / 调试器 + 表达式求值器 | `make test-expr` 全绿 | [stage-1-monitor.md](docs/stage-1-monitor.md) |
+| 2 | ✅ | 物理内存 + 寄存器 + PC | `info r` 打印 32 个寄存器 | [stage-2-memory-cpu.md](docs/stage-2-memory-cpu.md) |
+| 3 | ✅ | RV32I 指令解码与执行 | 递归 fib、迭代 fib 等程序 | [stage-3-rv32i.md](docs/stage-3-rv32i.md) |
+| 4 | ✅ | Difftest 差分测试 | 两套实现 52 例 lock-step 无差异 | [stage-4-difftest.md](docs/stage-4-difftest.md) |
+| 5 | ✅ | MMIO 设备（串口、定时器）| hello world + 单调定时器测试 | [stage-5-mmio.md](docs/stage-5-mmio.md) |
 | 6 |   | （可选）异常 / 分页 / 小 OS | 跑起一个用户态进程 | [stage-6-os.md](docs/stage-6-os.md) |
+
+**上手指南**：[docs/playground.md](docs/playground.md) —— 克隆下来后怎么"玩"，REPL 游 + 手搓程序 + 看 difftest 工作。
 
 详细阅读建议与文档写作约定见 [docs/README.md](docs/README.md)。
 
