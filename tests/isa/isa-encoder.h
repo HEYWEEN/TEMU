@@ -51,6 +51,32 @@ static inline uint32_t utype(uint32_t imm20, uint32_t rd, uint32_t op) {
     return (imm20 & 0xfffff000) | ((rd & 0x1f) << 7) | (op & 0x7f);
 }
 
+/* B-type: imm[12|10:5] rs2 rs1 funct3 imm[4:1|11] opcode
+ * imm[0] is implicit zero. The caller gives the full byte offset. */
+static inline uint32_t btype(int32_t imm, uint32_t rs2, uint32_t rs1,
+                             uint32_t f3, uint32_t op) {
+    uint32_t i = (uint32_t)imm;
+    return (((i >> 12) & 0x1)  << 31) |
+           (((i >> 5)  & 0x3f) << 25) |
+           ((rs2 & 0x1f)       << 20) |
+           ((rs1 & 0x1f)       << 15) |
+           ((f3  & 0x07)       << 12) |
+           (((i >> 1)  & 0xf)  <<  8) |
+           (((i >> 11) & 0x1)  <<  7) |
+            (op  & 0x7f);
+}
+
+/* J-type: imm[20|10:1|11|19:12] rd opcode. imm[0] implicit zero. */
+static inline uint32_t jtype(int32_t imm, uint32_t rd, uint32_t op) {
+    uint32_t i = (uint32_t)imm;
+    return (((i >> 20) & 0x1)   << 31) |
+           (((i >> 1)  & 0x3ff) << 21) |
+           (((i >> 11) & 0x1)   << 20) |
+           (((i >> 12) & 0xff)  << 12) |
+           ((rd & 0x1f)         <<  7) |
+            (op  & 0x7f);
+}
+
 /* --- RV32I mnemonics (only the ones exercised so far) ------------- */
 
 /* I-type arithmetic */
@@ -81,6 +107,19 @@ static inline uint32_t utype(uint32_t imm20, uint32_t rd, uint32_t op) {
 /* U-type */
 #define LUI(rd, imm20)       utype(imm20, rd, 0x37)
 #define AUIPC(rd, imm20)     utype(imm20, rd, 0x17)
+
+/* B-type branches */
+#define BEQ(rs1, rs2, imm)   btype(imm, rs2, rs1, 0x0, 0x63)
+#define BNE(rs1, rs2, imm)   btype(imm, rs2, rs1, 0x1, 0x63)
+#define BLT(rs1, rs2, imm)   btype(imm, rs2, rs1, 0x4, 0x63)
+#define BGE(rs1, rs2, imm)   btype(imm, rs2, rs1, 0x5, 0x63)
+#define BLTU(rs1, rs2, imm)  btype(imm, rs2, rs1, 0x6, 0x63)
+#define BGEU(rs1, rs2, imm)  btype(imm, rs2, rs1, 0x7, 0x63)
+
+/* Jumps */
+#define JAL(rd, imm)         jtype(imm, rd, 0x6f)
+#define JALR(rd, rs1, imm)   itype(imm, rs1, 0x0, rd, 0x67)
+#define J(imm)               JAL(ZERO, imm)     /* plain jump */
 
 /* Pseudoinstructions built from the above. MV is ADDI with imm=0. */
 #define MV(rd, rs)           ADDI(rd, rs, 0)

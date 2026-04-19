@@ -141,6 +141,36 @@ int isa_exec_once(Decode *s) {
     INSTPAT("0000000 ????? ????? 111 ????? 0110011", R,
             R(rd) = src1 & src2);                        /* AND    */
 
+    /* --- branches (B-type) ----------------------------------------- *
+     * dnpc defaults to snpc; only overwrite when the condition holds. */
+    INSTPAT("??????? ????? ????? 000 ????? 1100011", B,
+            if (src1 == src2) s->dnpc = s->pc + imm);    /* BEQ  */
+    INSTPAT("??????? ????? ????? 001 ????? 1100011", B,
+            if (src1 != src2) s->dnpc = s->pc + imm);    /* BNE  */
+    INSTPAT("??????? ????? ????? 100 ????? 1100011", B,
+            if ((sword_t)src1 <  (sword_t)src2) s->dnpc = s->pc + imm); /* BLT  */
+    INSTPAT("??????? ????? ????? 101 ????? 1100011", B,
+            if ((sword_t)src1 >= (sword_t)src2) s->dnpc = s->pc + imm); /* BGE  */
+    INSTPAT("??????? ????? ????? 110 ????? 1100011", B,
+            if (src1 <  src2) s->dnpc = s->pc + imm);    /* BLTU */
+    INSTPAT("??????? ????? ????? 111 ????? 1100011", B,
+            if (src1 >= src2) s->dnpc = s->pc + imm);    /* BGEU */
+
+    /* --- jumps ----------------------------------------------------- */
+    /* JAL writes pc+4 to rd and jumps; JALR does the same but from a
+     * register base. For both, save snpc before computing dnpc so the
+     * rd == rs1 corner case works. */
+    INSTPAT("??????? ????? ????? ??? ????? 1101111", J, {
+        word_t link = s->snpc;
+        s->dnpc = s->pc + imm;
+        R(rd) = link;
+    });                                                  /* JAL  */
+    INSTPAT("??????? ????? ????? 000 ????? 1100111", I, {
+        word_t link = s->snpc;
+        s->dnpc = (src1 + imm) & ~(word_t)1;
+        R(rd) = link;
+    });                                                  /* JALR */
+
     /* --- system ---------------------------------------------------- */
     INSTPAT("0000000 00001 00000 000 00000 1110011", N,
             temu_set_end(s->pc, R(10)));   /* ebreak: halt with a0 */

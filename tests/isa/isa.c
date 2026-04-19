@@ -209,6 +209,91 @@ static void test_x0_hardwired(void) {
          ADD(A0, ZERO, ZERO));           /* a0 = x0 + x0 = 0 */
 }
 
+/* Branch-test template. The pattern after the two register-setup insns
+ * is always:
+ *   [N-3]  BCC ..., +12          ; if taken, jump 3 insns ahead
+ *   [N-2]  ADDI a0, zero, 77     ; fall-through marker
+ *   [N-1]  JAL  zero, +8         ; skip the taken marker and halt
+ *   [N]    ADDI a0, zero, 88     ; taken marker
+ * halt_ret = 88 when taken, 77 when not taken. */
+#define BRANCH_BODY(BCC, rs1, rs2)     \
+    BCC(rs1, rs2, 12),                 \
+    ADDI(A0, ZERO, 77),                \
+    JAL(ZERO, 8),                      \
+    ADDI(A0, ZERO, 88)
+
+static void test_branches(void) {
+    TEST("beq taken",     88,
+         /* 0==0 → taken */
+         BRANCH_BODY(BEQ, ZERO, ZERO));
+    TEST("beq not-taken", 77,
+         ADDI(T0, ZERO, 1),
+         BRANCH_BODY(BEQ, ZERO, T0));
+
+    TEST("bne taken",     88,
+         ADDI(T0, ZERO, 1),
+         BRANCH_BODY(BNE, ZERO, T0));
+    TEST("bne not-taken", 77,
+         BRANCH_BODY(BNE, ZERO, ZERO));
+
+    /* Same operands: BLT signed takes, BLTU unsigned does not. */
+    TEST("blt signed taken",   88,
+         ADDI(T0, ZERO, -5),
+         ADDI(T1, ZERO, 5),
+         BRANCH_BODY(BLT, T0, T1));
+    TEST("bltu unsigned NT",   77,
+         ADDI(T0, ZERO, -5),       /* 0xfffffffb > 5 as unsigned */
+         ADDI(T1, ZERO, 5),
+         BRANCH_BODY(BLTU, T0, T1));
+
+    TEST("bge equal",          88,
+         ADDI(T0, ZERO, 5),
+         ADDI(T1, ZERO, 5),
+         BRANCH_BODY(BGE, T0, T1));
+    TEST("bgeu unsigned",      88,
+         ADDI(T0, ZERO, -1),       /* 0xffffffff >= 1 as unsigned */
+         ADDI(T1, ZERO, 1),
+         BRANCH_BODY(BGEU, T0, T1));
+
+    /* Backward branch — sum 3+2+1 = 6 using a loop. */
+    TEST("bne loop countdown", 6,
+         ADDI(T0, ZERO, 3),                /* counter */
+         ADDI(A0, ZERO, 0),                /* accumulator */
+         ADD(A0, A0, T0),                  /* loop: a0 += t0 */
+         ADDI(T0, T0, -1),
+         BNE(T0, ZERO, -8));               /* jump back to ADD */
+}
+
+static void test_jumps(void) {
+    /* JAL forward: skip the dummy, land at the intended target, check
+     * that ra = pc+4 of JAL (so ra = 0x80000004 since JAL is at 0x80000000
+     * and snpc = 0x80000004). Actually no — after ADDI A0,ZERO,99 comes
+     * JAL at offset 4. JAL snpc = 0x80000008. Put RA into A0 to check. */
+    TEST("jal link + jump", 0x80000008u,
+         ADDI(A0, ZERO, 99),               /* 0x80000000 — discarded */
+         JAL(RA, 8),                       /* 0x80000004 — jumps to 0x8000000C */
+         ADDI(A0, ZERO, 7),                /* 0x80000008 — skipped */
+         MV(A0, RA));                      /* 0x8000000C — a0 = ra = 0x80000008 */
+
+    /* Function-call pattern: caller hands off to a function via JAL(RA, ...)
+     * and the function returns via JALR(ZERO, RA, 0). The callee is
+     * placed *before* the caller, so the call offset is negative. */
+    TEST("jal backward + jalr return", 10,
+         JAL(ZERO, 12),                    /* 0x80000000 — skip callee */
+         ADDI(A0, A0, 5),                  /* 0x80000004 — func: a0 += 5 */
+         JALR(ZERO, RA, 0),                /* 0x80000008 — return to caller */
+         ADDI(A0, ZERO, 5),                /* 0x8000000C — caller: a0 = 5 */
+         JAL(RA, -12));                    /* 0x80000010 — call func; target 0x80000004 */
+
+    /* JALR absolute-ish: load base into t0, jump to t0 + imm. Use AUIPC
+     * to get current PC. */
+    TEST("jalr to computed target", 42,
+         AUIPC(T0, 0),                     /* t0 = 0x80000000 */
+         JALR(ZERO, T0, 12),               /* pc = 0x80000000 + 12 = 0x8000000C */
+         ADDI(A0, ZERO, 7),                /* 0x80000008 — skipped */
+         ADDI(A0, ZERO, 42));              /* 0x8000000C — landed */
+}
+
 /* ------------------------------------------------------------------ */
 
 int main(int argc, char *argv[]) {
@@ -222,6 +307,8 @@ int main(int argc, char *argv[]) {
     test_rtype_arith();
     test_upper_immediate();
     test_x0_hardwired();
+    test_branches();
+    test_jumps();
 
     printf("isa tests: %d passed, %d failed\n", pass_count, fail_count);
     return fail_count == 0 ? 0 : 1;
