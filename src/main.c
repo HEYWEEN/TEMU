@@ -41,7 +41,7 @@ static int run_expr_tests(const char *path) {
         return 2;
     }
 
-    char line[512];
+    char line[8192];
     int  pass = 0, fail = 0, lineno = 0;
 
     while (fgets(line, sizeof line, fp)) {
