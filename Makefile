@@ -11,7 +11,7 @@ SRCS := $(shell find $(SRC_DIR) -name '*.c')
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 DEPS := $(OBJS:.o=.d)
 
-.PHONY: all clean run test test-expr test-expr-fuzz tools
+.PHONY: all clean run test test-expr test-expr-fuzz test-pmem tools
 
 all: $(TARGET)
 
@@ -34,13 +34,16 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 run: $(TARGET)
 	./$(TARGET)
 
-test: test-expr
+test: test-expr test-pmem
 
 test-expr: $(TARGET)
 	@./$(TARGET) -t tests/expr/basic.txt
 
 test-expr-fuzz: $(TARGET) $(GENEXPR)
 	@./tests/expr/fuzz.sh $(or $(N),500)
+
+test-pmem: $(TARGET)
+	@./tests/pmem/load.sh
 
 clean:
 	rm -rf $(BUILD_DIR)
