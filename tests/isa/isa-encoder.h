@@ -156,4 +156,24 @@ static inline uint32_t jtype(int32_t imm, uint32_t rd, uint32_t op) {
 
 #define EBREAK               0x00100073u
 
+/* --- Zicsr — CSR access (opcode 0x73) ----------------------------- *
+ * itype() masks imm to 12 bits, which is exactly what the CSR number
+ * field occupies ([31:20]). For the "immediate" variants the rs1
+ * field carries a 5-bit unsigned immediate instead of a register. */
+#define CSRRW(rd, csr, rs1)   itype((int32_t)(csr), rs1, 0x1, rd, 0x73)
+#define CSRRS(rd, csr, rs1)   itype((int32_t)(csr), rs1, 0x2, rd, 0x73)
+#define CSRRC(rd, csr, rs1)   itype((int32_t)(csr), rs1, 0x3, rd, 0x73)
+#define CSRRWI(rd, csr, zimm) itype((int32_t)(csr), (zimm) & 0x1f, 0x5, rd, 0x73)
+#define CSRRSI(rd, csr, zimm) itype((int32_t)(csr), (zimm) & 0x1f, 0x6, rd, 0x73)
+#define CSRRCI(rd, csr, zimm) itype((int32_t)(csr), (zimm) & 0x1f, 0x7, rd, 0x73)
+
+/* CSR numbers matching src/isa/riscv32/local-include/csr.h. */
+#define CSR_MSTATUS   0x300
+#define CSR_MIE       0x304
+#define CSR_MTVEC     0x305
+#define CSR_MSCRATCH  0x340
+#define CSR_MEPC      0x341
+#define CSR_MCAUSE    0x342
+#define CSR_MIP       0x344
+
 #endif /* TEMU_TESTS_ISA_ENCODER_H */

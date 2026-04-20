@@ -22,18 +22,52 @@
 #include "memory.h"
 
 #include "../isa/riscv32/local-include/inst.h"
+#include "../isa/riscv32/local-include/csr.h"
 
 /* ------------------------------------------------------------------ */
 /* Reference-side state                                                */
 /* ------------------------------------------------------------------ */
 
 static CPU_state ref_cpu;
+static CSR_state ref_csr;
 static bool      ref_halted  = false;
 static bool      ref_aborted = false;
 static bool      enabled     = false;
 
 void difftest_enable(bool on) { enabled = on; }
 bool difftest_is_enabled(void) { return enabled; }
+
+/* Second-opinion CSR file. Deliberately implemented with a switch
+ * dispatch instead of the table-driven style used by src/isa/riscv32/
+ * csr.c, so that a CSR-number typo on one side diverges from the
+ * other and is caught by difftest_step. Shares the CSR_state type
+ * (it's just seven scalar fields — no behaviour to diverge on) but
+ * not the storage. */
+static word_t ref_csr_read(uint32_t addr) {
+    switch (addr) {
+    case CSR_MSTATUS:  return ref_csr.mstatus;
+    case CSR_MIE:      return ref_csr.mie;
+    case CSR_MTVEC:    return ref_csr.mtvec;
+    case CSR_MSCRATCH: return ref_csr.mscratch;
+    case CSR_MEPC:     return ref_csr.mepc;
+    case CSR_MCAUSE:   return ref_csr.mcause;
+    case CSR_MIP:      return ref_csr.mip;
+    default:           return 0;
+    }
+}
+
+static void ref_csr_write(uint32_t addr, word_t val) {
+    switch (addr) {
+    case CSR_MSTATUS:  ref_csr.mstatus  = val; break;
+    case CSR_MIE:      ref_csr.mie      = val; break;
+    case CSR_MTVEC:    ref_csr.mtvec    = val; break;
+    case CSR_MSCRATCH: ref_csr.mscratch = val; break;
+    case CSR_MEPC:     ref_csr.mepc     = val; break;
+    case CSR_MCAUSE:   ref_csr.mcause   = val; break;
+    case CSR_MIP:      ref_csr.mip      = val; break;
+    default:           break;
+    }
+}
 
 /* ------------------------------------------------------------------ */
 /* Bit / immediate helpers — inline shift + mask style, distinct from *
@@ -228,15 +262,36 @@ static void ref_exec_one(void) {
     case 0x0f: /* MISC-MEM — FENCE / FENCE.I treated as NOP */
         break;
 
-    case 0x73: /* SYSTEM */
+    case 0x73: { /* SYSTEM — EBREAK (halt) or Zicsr */
         if (inst == 0x00100073u) {
             ref_halted = true;
             /* Do not advance pc_next — main side doesn't either, and
              * keeping them identical is the whole point. */
             return;
         }
-        ref_invalid(pc_cur, inst);
-        return;
+        if (f3 == 0) {
+            /* ECALL and other SYSTEM encodings land here in stage 6a-3;
+             * for now any non-EBREAK f3=0 is rejected. */
+            ref_invalid(pc_cur, inst);
+            return;
+        }
+        /* Zicsr. f3 bit 2 selects immediate vs register form; low 2
+         * bits select RW/RS/RC. */
+        uint32_t addr    = (inst >> 20) & 0xfff;
+        bool     is_imm  = (f3 & 0x4) != 0;
+        uint32_t zimm    = rs1;             /* rs1 field as 5-bit imm  */
+        uint32_t operand = is_imm ? zimm : G(rs1);
+        bool     src_nz  = is_imm ? (zimm != 0) : (rs1 != 0);
+        word_t   old     = ref_csr_read(addr);
+        switch (f3 & 0x3) {
+        case 0x1:                          ref_csr_write(addr, operand);    break;
+        case 0x2: if (src_nz)              ref_csr_write(addr, old | operand); break;
+        case 0x3: if (src_nz)              ref_csr_write(addr, old & ~operand); break;
+        default:  ref_invalid(pc_cur, inst); return;
+        }
+        G(rd) = old;
+        break;
+    }
 
     default:
         ref_invalid(pc_cur, inst);
@@ -253,6 +308,7 @@ static void ref_exec_one(void) {
 
 void difftest_init(void) {
     memcpy(&ref_cpu, &cpu, sizeof(CPU_state));
+    memcpy(&ref_csr, &csr, sizeof(CSR_state));
     ref_halted  = false;
     ref_aborted = false;
     Log("difftest: initialized — ref pc=0x%08" PRIx32, ref_cpu.pc);
@@ -269,6 +325,7 @@ void difftest_step(void) {
      * two stay aligned going forward, and skip this step's compare. */
     if (paddr_touched_mmio) {
         memcpy(&ref_cpu, &cpu, sizeof(CPU_state));
+        memcpy(&ref_csr, &csr, sizeof(CSR_state));
         paddr_touched_mmio = false;
         return;
     }
@@ -292,6 +349,28 @@ void difftest_step(void) {
                 cpu.pc, ref_cpu.pc);
         mismatch = true;
     }
+
+    /* CSR compare. Laid out explicitly — seven fields is few enough
+     * that a table offers no win over unrolling, and the unrolled form
+     * survives adding new CSRs in 6b/6c with one extra line each. */
+    #define CSR_CMP(field) do {                                              \
+        if (csr.field != ref_csr.field) {                                    \
+            fprintf(stderr,                                                  \
+                    "  csr %-8s  : mine=0x%08" PRIx32                        \
+                    "  ref=0x%08" PRIx32 "\n",                               \
+                    #field, csr.field, ref_csr.field);                       \
+            mismatch = true;                                                 \
+        }                                                                    \
+    } while (0)
+    CSR_CMP(mstatus);
+    CSR_CMP(mie);
+    CSR_CMP(mtvec);
+    CSR_CMP(mscratch);
+    CSR_CMP(mepc);
+    CSR_CMP(mcause);
+    CSR_CMP(mip);
+    #undef CSR_CMP
+
     if (ref_aborted) {
         fprintf(stderr,
                 "  ref aborted but main kept running — divergence\n");

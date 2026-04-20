@@ -18,6 +18,7 @@
 #include "common.h"
 #include "cpu.h"
 #include "local-include/inst.h"
+#include "local-include/csr.h"
 
 static bool name_is(const Disasm_info *d, const char *s) {
     return strcmp(d->name, s) == 0;
@@ -49,6 +50,29 @@ int disasm(char *buf, size_t n, const Disasm_info *d) {
     /* JALR: a regular I-type with the jump target in rs1+imm. */
     if (name_is(d, "jalr")) {
         return snprintf(buf, n, "%-7s %s, %d(%s)", d->name, rd, simm, rs1);
+    }
+
+    /* Zicsr: inst[31:20] is the CSR number; prefer its name when known.
+     * Immediate variants use the rs1 field as a 5-bit zero-extended
+     * literal, which we reconstruct from d->rs1. */
+    if (name_is(d, "csrrw")  || name_is(d, "csrrs")  || name_is(d, "csrrc") ||
+        name_is(d, "csrrwi") || name_is(d, "csrrsi") || name_is(d, "csrrci")) {
+        uint32_t    addr  = (uint32_t)BITS(d->inst, 31, 20);
+        const char *cname = csr_name(addr);
+        char        csr_buf[16];
+        if (cname == NULL) {
+            snprintf(csr_buf, sizeof csr_buf, "0x%x", addr);
+            cname = csr_buf;
+        }
+        bool is_imm = (name_is(d, "csrrwi") ||
+                       name_is(d, "csrrsi") ||
+                       name_is(d, "csrrci"));
+        if (is_imm) {
+            return snprintf(buf, n, "%-7s %s, %s, %u",
+                            d->name, rd, cname, (unsigned)d->rs1);
+        }
+        return snprintf(buf, n, "%-7s %s, %s, %s",
+                        d->name, rd, cname, rs1);
     }
 
     /* Branches: pc-relative target rendered absolute. */

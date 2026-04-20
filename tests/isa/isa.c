@@ -366,6 +366,97 @@ static void test_jumps(void) {
          ADDI(A0, ZERO, 42));              /* 0x8000000C — landed */
 }
 
+/* Zicsr. All tests funnel the final value into a0 via
+ *   csrrs a0, <csr>, zero
+ * which is a pure read (rs1=x0 must not write — spec rule that's easy
+ * to miss). mscratch is the workhorse since it has no side effects;
+ * mtvec and mepc are also exercised so table-driven dispatch is proven
+ * correct across CSR numbers, not just on one lucky entry. */
+static void test_csr(void) {
+    /* Basic write-then-read. Build 0x12345678 with LUI + small ADDI
+     * (0x678 = 1656 fits 12-bit signed). */
+    TEST("csrrw + csrrs read", 0x12345678u,
+         LUI(T0, 0x12345000),
+         ADDI(T0, T0, 0x678),
+         CSRRW(ZERO, CSR_MSCRATCH, T0),
+         CSRRS(A0, CSR_MSCRATCH, ZERO));
+
+    /* csrrw returns the pre-write value in rd. */
+    TEST("csrrw returns old", 0xaau,
+         ADDI(T0, ZERO, 0xaa),
+         CSRRW(ZERO, CSR_MSCRATCH, T0),
+         ADDI(T1, ZERO, 0xbb),
+         CSRRW(A0, CSR_MSCRATCH, T1));       /* a0 <- old 0xaa */
+
+    /* Aliased rd == rs1 for csrrw. Spec demands the *original* CSR
+     * value end up in rd even though rs1 gets reused — equivalent to
+     * reading-before-writing. A naive implementation that writes
+     * before reading would put the old t0 value in t0. */
+    TEST("csrrw aliased rd=rs1", 0x55u,
+         ADDI(T0, ZERO, 0x55),
+         CSRRW(ZERO, CSR_MSCRATCH, T0),       /* mscratch = 0x55 */
+         ADDI(T0, ZERO, 0x66),                /* t0 = 0x66 */
+         CSRRW(T0, CSR_MSCRATCH, T0),         /* t0 <- 0x55; mscratch <- 0x66 */
+         MV(A0, T0));
+
+    /* csrrs OR-sets bits. Keep operands under 0x7ff so ADDI's 12-bit
+     * signed immediate doesn't sign-extend them into negative territory. */
+    TEST("csrrs or-set", 0x10fu,
+         ADDI(T0, ZERO, 0x100),
+         CSRRW(ZERO, CSR_MSCRATCH, T0),
+         ADDI(T1, ZERO, 0x00f),
+         CSRRS(ZERO, CSR_MSCRATCH, T1),       /* mscratch |= 0x00f */
+         CSRRS(A0, CSR_MSCRATCH, ZERO));
+
+    /* csrrc AND-NOTs bits. */
+    TEST("csrrc clear-bits", 0x100u,
+         ADDI(T0, ZERO, 0x10f),
+         CSRRW(ZERO, CSR_MSCRATCH, T0),
+         ADDI(T1, ZERO, 0x00f),
+         CSRRC(ZERO, CSR_MSCRATCH, T1),
+         CSRRS(A0, CSR_MSCRATCH, ZERO));
+
+    /* Immediate variants: the 5-bit rs1 field is zero-extended, so
+     * 0x1f is the largest representable operand. */
+    TEST("csrrwi sets zimm", 31,
+         CSRRWI(ZERO, CSR_MSCRATCH, 31),
+         CSRRS(A0, CSR_MSCRATCH, ZERO));
+
+    TEST("csrrsi or-imm", 0xffu,
+         ADDI(T0, ZERO, 0xe0),
+         CSRRW(ZERO, CSR_MSCRATCH, T0),
+         CSRRSI(ZERO, CSR_MSCRATCH, 0x1f),
+         CSRRS(A0, CSR_MSCRATCH, ZERO));
+
+    TEST("csrrci clear-imm", 0xe0u,
+         ADDI(T0, ZERO, 0xff),
+         CSRRW(ZERO, CSR_MSCRATCH, T0),
+         CSRRCI(ZERO, CSR_MSCRATCH, 0x1f),
+         CSRRS(A0, CSR_MSCRATCH, ZERO));
+
+    /* Separate CSRs should not alias. Write 0x80001000 to mtvec and
+     * 0xdead0000 to mscratch; reading mtvec must return its own value,
+     * not mscratch's. */
+    TEST("mtvec separate from mscratch", 0x80001000u,
+         LUI(T0, 0x80001000),
+         LUI(T1, 0xdead0000),
+         CSRRW(ZERO, CSR_MTVEC,    T0),
+         CSRRW(ZERO, CSR_MSCRATCH, T1),
+         CSRRS(A0,   CSR_MTVEC,    ZERO));
+
+    TEST("mepc round-trip", 0x80002000u,
+         LUI(T0, 0x80002000),
+         CSRRW(ZERO, CSR_MEPC, T0),
+         CSRRS(A0, CSR_MEPC, ZERO));
+
+    /* Unknown CSR number — stage 6a policy is read-zero / write-drop
+     * (not trap). Writing 0xff then reading back must give 0. */
+    TEST("unknown csr reads zero", 0,
+         ADDI(T0, ZERO, 0xff),
+         CSRRW(ZERO, 0x7c0, T0),
+         CSRRS(A0, 0x7c0, ZERO));
+}
+
 /* ------------------------------------------------------------------ */
 
 int main(int argc, char *argv[]) {
@@ -383,6 +474,7 @@ int main(int argc, char *argv[]) {
     test_branches();
     test_jumps();
     test_load_store();
+    test_csr();
 
     printf("isa tests: %d passed, %d failed\n", pass_count, fail_count);
     return fail_count == 0 ? 0 : 1;

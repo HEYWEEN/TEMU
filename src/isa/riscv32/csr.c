@@ -43,6 +43,11 @@ void csr_write(uint32_t addr, word_t val) {
     if (e != NULL) *e->field = val;
 }
 
+const char *csr_name(uint32_t addr) {
+    csr_entry_t *e = find_by_addr(addr);
+    return e ? e->name : NULL;
+}
+
 void csr_dump(void) {
     for (int i = 0; i < NR_CSR; i++) {
         printf("  %-8s (0x%03" PRIx32 ") = 0x%08" PRIx32 "\n",

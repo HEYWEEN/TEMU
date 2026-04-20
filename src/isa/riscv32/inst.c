@@ -2,6 +2,7 @@
 #include "cpu.h"
 #include "memory.h"
 #include "local-include/inst.h"
+#include "local-include/csr.h"
 
 /* ------------------------------------------------------------------ */
 /* Runtime pattern matcher                                             */
@@ -208,6 +209,58 @@ int isa_exec_once(Decode *s) {
         word_t link = s->snpc;
         s->dnpc = (src1 + imm) & ~(word_t)1;
         R(rd) = link;
+    });
+
+    /* --- Zicsr (CSR read-modify-write; opcode 0x73, funct3 != 0) --- *
+     * Pull the CSR number straight out of inst[31:20]; TYPE_I decoded
+     * `src1` already holds R(rs1). For the immediate variants we reuse
+     * the rs1 field as a 5-bit zero-extended literal.
+     *
+     * Subtle rule from the Privileged Spec: CSRRS/CSRRC with rs1=x0
+     * (zimm=0 for the immediate variants) must not write the CSR at
+     * all — our fields have no side effects yet, but encoding the rule
+     * now avoids surprise later. CSRRW always writes.
+     *
+     * Save the original CSR value before writing so that aliasing like
+     * `csrrw t0, mscratch, t0` returns the pre-write value in rd. */
+    INSTPAT("??????? ????? ????? 001 ????? 1110011", "csrrw",  I, {
+        uint32_t addr = (uint32_t)BITS(inst, 31, 20);
+        word_t   old  = csr_read(addr);
+        csr_write(addr, src1);
+        R(rd) = old;
+    });
+    INSTPAT("??????? ????? ????? 010 ????? 1110011", "csrrs",  I, {
+        uint32_t addr = (uint32_t)BITS(inst, 31, 20);
+        word_t   old  = csr_read(addr);
+        if (BITS(inst, 19, 15) != 0) csr_write(addr, old | src1);
+        R(rd) = old;
+    });
+    INSTPAT("??????? ????? ????? 011 ????? 1110011", "csrrc",  I, {
+        uint32_t addr = (uint32_t)BITS(inst, 31, 20);
+        word_t   old  = csr_read(addr);
+        if (BITS(inst, 19, 15) != 0) csr_write(addr, old & ~src1);
+        R(rd) = old;
+    });
+    INSTPAT("??????? ????? ????? 101 ????? 1110011", "csrrwi", I, {
+        uint32_t addr = (uint32_t)BITS(inst, 31, 20);
+        word_t   zimm = (word_t)BITS(inst, 19, 15);
+        word_t   old  = csr_read(addr);
+        csr_write(addr, zimm);
+        R(rd) = old;
+    });
+    INSTPAT("??????? ????? ????? 110 ????? 1110011", "csrrsi", I, {
+        uint32_t addr = (uint32_t)BITS(inst, 31, 20);
+        word_t   zimm = (word_t)BITS(inst, 19, 15);
+        word_t   old  = csr_read(addr);
+        if (zimm != 0) csr_write(addr, old | zimm);
+        R(rd) = old;
+    });
+    INSTPAT("??????? ????? ????? 111 ????? 1110011", "csrrci", I, {
+        uint32_t addr = (uint32_t)BITS(inst, 31, 20);
+        word_t   zimm = (word_t)BITS(inst, 19, 15);
+        word_t   old  = csr_read(addr);
+        if (zimm != 0) csr_write(addr, old & ~zimm);
+        R(rd) = old;
     });
 
     /* --- system ---------------------------------------------------- */

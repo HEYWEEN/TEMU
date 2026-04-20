@@ -33,4 +33,8 @@ void csr_init(void);
 word_t csr_read (uint32_t addr);
 void   csr_write(uint32_t addr, word_t val);
 
+/* Returns the printable name ("mstatus", "mepc", ...) for a CSR
+ * number, or NULL if unknown. Used by the disassembler. */
+const char *csr_name(uint32_t addr);
+
 #endif /* RISCV32_CSR_H */
