@@ -63,6 +63,7 @@
 | 3 | [stage-3-rv32i.md](stage-3-rv32i.md) | ✅ 已完成 |
 | 4 | [stage-4-difftest.md](stage-4-difftest.md) | ✅ 已完成 |
 | 5 | [stage-5-mmio.md](stage-5-mmio.md) | ✅ 已完成 |
-| 6 | [stage-6-os.md](stage-6-os.md) | 📝 可选 |
+| 6 | [stage-6-os.md](stage-6-os.md) | 📝 可选（总览）|
+| 6a | [stage-6a-csr-trap.md](stage-6a-csr-trap.md) | 📝 设计稿（CSR + trap + 定时器中断）|
 
 > 各 stage 文档记录了**动机与设计思路**，是教科书式的"为什么这样做"；想知道**现在这台模拟器怎么用**，从 [playground.md](playground.md) 开始。

@@ -61,4 +61,12 @@ const char *reg_name(int idx);
  * held by that register. */
 word_t isa_reg_val(const char *name, bool *success);
 
+/* Pretty-print all implemented CSRs to stdout. Used by `info c`. */
+void csr_dump(void);
+
+/* Look up a CSR by name (e.g. "mstatus", "mepc"). Returns true and
+ * fills *out if found. Used by the expression evaluator so that
+ * `p $mstatus` works. */
+bool csr_lookup(const char *name, word_t *out);
+
 #endif /* CPU_H */

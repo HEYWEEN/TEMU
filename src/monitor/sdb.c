@@ -25,7 +25,7 @@ static struct {
     { "help", "Show command list",                         cmd_help },
     { "c",    "Continue execution  (stage 3+ only)",       cmd_c    },
     { "si",   "si [N] : single-step N (stage 3+ only)",    cmd_si   },
-    { "info", "info r | info w : regs or watchpoints",     cmd_info },
+    { "info", "info r | info c | info w : regs / csrs / watchpoints", cmd_info },
     { "x",    "x N EXPR : examine N words starting at EXPR", cmd_x  },
     { "p",    "p EXPR   : evaluate and print expression",  cmd_p    },
     { "w",    "w EXPR   : add watchpoint on EXPR",         cmd_w    },
@@ -85,14 +85,16 @@ static void print_regs(void) {
 
 static int cmd_info(char *args) {
     if (args == NULL) {
-        printf("usage: info r | info w\n");
+        printf("usage: info r | info c | info w\n");
         return 0;
     }
     char *sub = strtok(args, " \t");
     if (sub == NULL) {
-        printf("usage: info r | info w\n");
+        printf("usage: info r | info c | info w\n");
     } else if (strcmp(sub, "r") == 0) {
         print_regs();
+    } else if (strcmp(sub, "c") == 0) {
+        csr_dump();
     } else if (strcmp(sub, "w") == 0) {
         wp_display();
     } else {

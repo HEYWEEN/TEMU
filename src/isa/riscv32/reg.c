@@ -1,11 +1,13 @@
 #include "cpu.h"
 #include "memory.h"
+#include "local-include/csr.h"
 
 CPU_state cpu = { .gpr = {0}, .pc = 0 };
 
 void cpu_init(void) {
     memset(cpu.gpr, 0, sizeof cpu.gpr);
     cpu.pc = RESET_VECTOR;
+    csr_init();
 }
 
 static const char *reg_abi[32] = {
@@ -47,6 +49,12 @@ word_t isa_reg_val(const char *name, bool *success) {
             *success = true;
             return cpu.gpr[i];
         }
+    }
+
+    word_t csr_val;
+    if (csr_lookup(name, &csr_val)) {
+        *success = true;
+        return csr_val;
     }
 
     *success = false;
