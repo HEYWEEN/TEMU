@@ -1,11 +1,13 @@
 #include "common.h"
 #include "cpu.h"
+#include "device.h"
 #include "difftest.h"
 #include "memory.h"
 #include "monitor.h"
 
 #include "../isa/riscv32/local-include/inst.h"
 #include "../isa/riscv32/local-include/trap.h"
+#include "../isa/riscv32/local-include/csr.h"
 
 /* ------------------------------------------------------------------ */
 /* Execution state                                                     */
@@ -97,6 +99,24 @@ static void exec_once(void) {
      * right thing for synchronous exceptions. */
     if (trap_pending()) {
         trap_commit();
+    }
+
+    /* Async interrupt delivery. Runs AFTER dnpc has been applied, so
+     * cpu.pc is already the instruction that would run next — this is
+     * what goes into mepc for external interrupts (they interrupt
+     * between instructions, not during one). Wall-clock based, so
+     * whether an interrupt fires on a given step depends on real
+     * elapsed time; difftest reuses paddr_touched_mmio to snapshot
+     * the reference CPU instead of trying to re-derive the decision. */
+    if (g.state == TEMU_RUNNING && (csr.mstatus & MSTATUS_MIE)) {
+        if (timer_mtime() >= timer_mtimecmp()) csr.mip |=  MIP_MTIP;
+        else                                   csr.mip &= ~MIP_MTIP;
+
+        if ((csr.mip & csr.mie) & MIP_MTIP) {
+            trap_take(CAUSE_INT_MTI, 0, cpu.pc);
+            trap_commit();
+            paddr_touched_mmio = true;   /* let difftest resync ref */
+        }
     }
 
     /* Difftest compares against the reference CPU. Skip on abort so

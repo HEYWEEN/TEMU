@@ -532,6 +532,55 @@ static void test_trap(void) {
     );
 }
 
+/* Machine timer interrupt demo. The program:
+ *   1. Points mtvec at a handler.
+ *   2. Arms mtimecmp = 0 so the timer compare fires immediately once
+ *      interrupts are globally enabled.
+ *   3. Enables mstatus.MIE and mie.MTIE.
+ *   4. Spins on a counter (s0). The handler bumps s0 and rearms the
+ *      timer unless s0 reached 3, in which case it pushes mtimecmp to
+ *      UINT64_MAX so no further interrupts fire.
+ *
+ * After three interrupts the loop falls through and EBREAK halts
+ * with a0 = 3. This exercises the whole trap-delivery path: timer
+ * poll, MIE gating, trap staging, mepc bookkeeping, mret restore.
+ *
+ * mtimecmp MMIO lives at 0xa0000050..0xa0000058; t1 holds its base
+ * throughout so both main and handler reuse the same pointer. */
+static void test_interrupt(void) {
+    TEST("timer interrupt fires 3 times", 3,
+         /* 0x00 */ J(44),                          /* skip handler → main at 0x2c */
+         /* 0x04: handler */
+         /* 0x04 */ ADDI(S0, S0, 1),                /* counter++ */
+         /* 0x08 */ ADDI(T3, ZERO, 3),
+         /* 0x0c */ BGE(S0, T3, 16),                /* if counter >= 3: disable-block @ 0x1c */
+         /* 0x10 */ SW(ZERO, T1, 0),                /* else: re-arm mtimecmp = 0 (lo) */
+         /* 0x14 */ SW(ZERO, T1, 4),                /*              mtimecmp = 0 (hi) */
+         /* 0x18 */ JAL(ZERO, 16),                  /* jump over disable-block → 0x28 mret */
+         /* 0x1c */ ADDI(T3, ZERO, -1),             /* disable: t3 = 0xffffffff */
+         /* 0x20 */ SW(T3, T1, 0),
+         /* 0x24 */ SW(T3, T1, 4),
+         /* 0x28 */ MRET,
+         /* 0x2c: main */
+         /* 0x2c */ LUI(T0, 0x80000000),
+         /* 0x30 */ ADDI(T0, T0, 4),                /* t0 = handler = 0x80000004 */
+         /* 0x34 */ CSRRW(ZERO, CSR_MTVEC, T0),
+         /* 0x38 */ ADDI(S0, ZERO, 0),              /* counter = 0 */
+         /* 0x3c */ LUI(T1, 0xa0000000),
+         /* 0x40 */ ADDI(T1, T1, 0x50),             /* t1 = &mtimecmp */
+         /* 0x44 */ SW(ZERO, T1, 0),                /* mtimecmp = 0 → fires on next poll */
+         /* 0x48 */ SW(ZERO, T1, 4),
+         /* 0x4c */ ADDI(T2, ZERO, 8),              /* MIE bit */
+         /* 0x50 */ CSRRS(ZERO, CSR_MSTATUS, T2),   /* mstatus.MIE = 1 */
+         /* 0x54 */ ADDI(T2, ZERO, 0x80),           /* MTIE bit */
+         /* 0x58 */ CSRRS(ZERO, CSR_MIE, T2),       /* mie.MTIE = 1 — interrupt delivery starts */
+         /* 0x5c: loop */
+         /* 0x5c */ ADDI(A0, S0, 0),                /* a0 = counter (will become halt_ret) */
+         /* 0x60 */ ADDI(T3, ZERO, 3),
+         /* 0x64 */ BLT(S0, T3, -8)                 /* while counter < 3: back to 0x5c */
+    );
+}
+
 /* ------------------------------------------------------------------ */
 
 int main(int argc, char *argv[]) {
@@ -551,6 +600,7 @@ int main(int argc, char *argv[]) {
     test_load_store();
     test_csr();
     test_trap();
+    test_interrupt();
 
     printf("isa tests: %d passed, %d failed\n", pass_count, fail_count);
     return fail_count == 0 ? 0 : 1;

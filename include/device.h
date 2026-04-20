@@ -26,4 +26,10 @@ void mmio_access  (paddr_t addr, int len, bool is_write, word_t *data);
  * cpu_init(). Idempotent. */
 void init_devices(void);
 
+/* Timer state for the interrupt-delivery loop in cpu_exec. Kept in
+ * microseconds of wall clock since init_timer(); stage 6a-4 uses
+ * these to drive mip.MTIP. */
+uint64_t timer_mtime   (void);
+uint64_t timer_mtimecmp(void);
+
 #endif /* DEVICE_H */

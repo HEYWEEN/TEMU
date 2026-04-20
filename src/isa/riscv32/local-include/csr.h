@@ -12,6 +12,13 @@
 #define CSR_MCAUSE    0x342
 #define CSR_MIP       0x344
 
+/* Bit masks. MIP / MIE share field positions — MTIP and MTIE are
+ * both bit 7 — so one constant serves both registers. */
+#define MSTATUS_MIE   (1u << 3)
+#define MSTATUS_MPIE  (1u << 7)
+#define MIP_MTIP      (1u << 7)
+#define MIE_MTIE      (1u << 7)
+
 /* Seven Machine-mode CSRs implemented in stage 6a. Other CSR numbers
  * are not rejected — reads return zero, writes are silently discarded —
  * so software that probes for optional CSRs does not trap. Stage 6b
