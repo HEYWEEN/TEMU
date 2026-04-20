@@ -5,6 +5,7 @@
 #include "monitor.h"
 
 #include "../isa/riscv32/local-include/inst.h"
+#include "../isa/riscv32/local-include/trap.h"
 
 /* ------------------------------------------------------------------ */
 /* Execution state                                                     */
@@ -89,6 +90,14 @@ static void exec_once(void) {
         cpu.pc = s.dnpc;
     }
     cpu.gpr[0] = 0;   /* x0 is hard-wired to zero */
+
+    /* Commit any trap staged by the INSTPAT body (ecall, ebreak-trap).
+     * Writing mepc/mcause/mstatus and redirecting PC happens here,
+     * after dnpc has been applied, so the staged epc is already the
+     * right thing for synchronous exceptions. */
+    if (trap_pending()) {
+        trap_commit();
+    }
 
     /* Difftest compares against the reference CPU. Skip on abort so
      * the ref does not re-emit confusing errors for the same

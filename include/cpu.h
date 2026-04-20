@@ -69,4 +69,14 @@ void csr_dump(void);
  * `p $mstatus` works. */
 bool csr_lookup(const char *name, word_t *out);
 
+/* EBREAK behaviour mode.
+ *
+ *   HALT — legacy: ebreak terminates emulation and reports halt_ret
+ *          (the pre-6a contract that the existing 65 isa+program
+ *          tests depend on). Default.
+ *   TRAP — spec-compliant: ebreak raises a BREAKPOINT exception.
+ *          Selected via `--ebreak=trap` on the command line. */
+typedef enum { EBREAK_HALT, EBREAK_TRAP } ebreak_mode_t;
+extern ebreak_mode_t g_ebreak_mode;
+
 #endif /* CPU_H */

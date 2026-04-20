@@ -155,6 +155,8 @@ static inline uint32_t jtype(int32_t imm, uint32_t rd, uint32_t op) {
 #define NOP                  ADDI(ZERO, ZERO, 0)
 
 #define EBREAK               0x00100073u
+#define ECALL                0x00000073u
+#define MRET                 0x30200073u
 
 /* --- Zicsr — CSR access (opcode 0x73) ----------------------------- *
  * itype() masks imm to 12 bits, which is exactly what the CSR number

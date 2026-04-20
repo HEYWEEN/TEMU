@@ -3,6 +3,7 @@
 #include "memory.h"
 #include "local-include/inst.h"
 #include "local-include/csr.h"
+#include "local-include/trap.h"
 
 /* ------------------------------------------------------------------ */
 /* Runtime pattern matcher                                             */
@@ -264,8 +265,31 @@ int isa_exec_once(Decode *s) {
     });
 
     /* --- system ---------------------------------------------------- */
-    INSTPAT("0000000 00001 00000 000 00000 1110011", "ebreak", N,
-            temu_set_end(s->pc, R(10)));
+    /* ECALL: synchronous trap into M-mode. mepc stores the PC of the
+     * ecall itself; the handler must bump mepc by 4 before mret,
+     * otherwise the instruction re-executes in a loop. */
+    INSTPAT("0000000 00000 00000 000 00000 1110011", "ecall",  N,
+            trap_take(CAUSE_ECALL_M, 0, s->pc));
+
+    /* EBREAK: two personalities.
+     *   halt  — legacy test-harness hook (`halt_ret = a0`); keeps the
+     *           existing isa / program tests working without changes.
+     *   trap  — spec-compliant BREAKPOINT exception, opted into via
+     *           `--ebreak=trap`. */
+    INSTPAT("0000000 00001 00000 000 00000 1110011", "ebreak", N, {
+        if (g_ebreak_mode == EBREAK_HALT) {
+            temu_set_end(s->pc, R(10));
+        } else {
+            trap_take(CAUSE_BREAKPOINT, s->pc, s->pc);
+        }
+    });
+
+    /* MRET: return from M-mode trap. Restores PC from mepc and MIE
+     * from MPIE. Writing dnpc (not cpu.pc directly) preserves the
+     * invariant that INSTPAT bodies produce PC through the Decode
+     * channel only. */
+    INSTPAT("0011000 00010 00000 000 00000 1110011", "mret",   N,
+            trap_mret(&s->dnpc));
 
     /* --- catch-all: anything not matched above is illegal ---------- */
     INSTPAT("??????? ????? ????? ??? ????? ???????", "invalid", N,

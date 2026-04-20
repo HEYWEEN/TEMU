@@ -14,24 +14,44 @@ static const char *log_file   = NULL;
 static const char *image_file = NULL;
 static const char *test_file  = NULL;
 
+ebreak_mode_t g_ebreak_mode = EBREAK_HALT;
+
 static void print_usage(const char *prog) {
     printf("Usage: %s [OPTION]... [IMAGE]\n", prog);
-    printf("  -b           run in batch mode (no REPL)\n");
-    printf("  -d           enable differential testing against the reference CPU\n");
-    printf("  -l FILE      write log to FILE\n");
-    printf("  -t FILE      run expression tests from FILE and exit\n");
-    printf("  -h           show this help and exit\n");
+    printf("  -b                run in batch mode (no REPL)\n");
+    printf("  -d                enable differential testing against the reference CPU\n");
+    printf("  -l FILE           write log to FILE\n");
+    printf("  -t FILE           run expression tests from FILE and exit\n");
+    printf("  --ebreak=halt|trap  ebreak semantics (default: halt)\n");
+    printf("  -h                show this help and exit\n");
 }
 
+/* Long-option flag ids above the ASCII range so they don't collide
+ * with the short options in the switch below. */
+enum { OPT_EBREAK = 0x100 };
+
 static int parse_args(int argc, char *argv[]) {
+    static const struct option longopts[] = {
+        { "ebreak", required_argument, NULL, OPT_EBREAK },
+        { 0, 0, 0, 0 },
+    };
+
     int opt;
-    while ((opt = getopt(argc, argv, "hbdl:t:")) != -1) {
+    while ((opt = getopt_long(argc, argv, "hbdl:t:", longopts, NULL)) != -1) {
         switch (opt) {
             case 'h': print_usage(argv[0]); return 1;
             case 'b': batch_mode = 1; break;
             case 'd': diff_mode  = 1; break;
             case 'l': log_file  = optarg; break;
             case 't': test_file = optarg; break;
+            case OPT_EBREAK:
+                if      (strcmp(optarg, "halt") == 0) g_ebreak_mode = EBREAK_HALT;
+                else if (strcmp(optarg, "trap") == 0) g_ebreak_mode = EBREAK_TRAP;
+                else {
+                    fprintf(stderr, "--ebreak: expected 'halt' or 'trap', got '%s'\n", optarg);
+                    return -1;
+                }
+                break;
             default:  print_usage(argv[0]); return -1;
         }
     }

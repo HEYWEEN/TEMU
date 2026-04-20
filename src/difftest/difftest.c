@@ -69,6 +69,34 @@ static void ref_csr_write(uint32_t addr, word_t val) {
     }
 }
 
+/* Trap-entry / mret helpers for the reference CPU. Expressed inline
+ * rather than by reusing trap.c so the two sides implement the
+ * privileged-spec mstatus dance independently — a bit-position typo
+ * on one side diverges from the other and is caught by the per-step
+ * CSR compare. */
+#define REF_CAUSE_BREAKPOINT  3u
+#define REF_CAUSE_ECALL_M    11u
+
+static void ref_trap_enter(word_t cause, word_t epc) {
+    ref_csr.mepc   = epc;
+    ref_csr.mcause = cause;
+    word_t s   = ref_csr.mstatus;
+    word_t mie = (s >> 3) & 1u;         /* MIE  = bit 3  */
+    s = (s & ~(1u << 7)) | (mie << 7);  /* MPIE = MIE    */
+    s &= ~(1u << 3);                    /* MIE  = 0      */
+    s = (s & ~(3u << 11)) | (3u << 11); /* MPP  = M (=3) */
+    ref_csr.mstatus = s;
+}
+
+static void ref_trap_return(uint32_t *pc_next) {
+    *pc_next = ref_csr.mepc;
+    word_t s    = ref_csr.mstatus;
+    word_t mpie = (s >> 7) & 1u;
+    s = (s & ~(1u << 3)) | (mpie << 3); /* MIE = MPIE */
+    s |= (1u << 7);                     /* MPIE = 1   */
+    ref_csr.mstatus = s;
+}
+
 /* ------------------------------------------------------------------ */
 /* Bit / immediate helpers — inline shift + mask style, distinct from *
  * the BITS / SEXT macros used by the main implementation.            */
@@ -262,16 +290,29 @@ static void ref_exec_one(void) {
     case 0x0f: /* MISC-MEM — FENCE / FENCE.I treated as NOP */
         break;
 
-    case 0x73: { /* SYSTEM — EBREAK (halt) or Zicsr */
-        if (inst == 0x00100073u) {
-            ref_halted = true;
-            /* Do not advance pc_next — main side doesn't either, and
-             * keeping them identical is the whole point. */
-            return;
+    case 0x73: { /* SYSTEM — EBREAK / ECALL / MRET / Zicsr */
+        if (inst == 0x00100073u) {              /* EBREAK */
+            if (g_ebreak_mode == EBREAK_HALT) {
+                ref_halted = true;
+                /* Do not advance pc_next — main side doesn't either. */
+                return;
+            }
+            ref_trap_enter(REF_CAUSE_BREAKPOINT, pc_cur);
+            pc_next = ref_csr.mtvec & ~3u;
+            break;
+        }
+        if (inst == 0x00000073u) {              /* ECALL */
+            ref_trap_enter(REF_CAUSE_ECALL_M, pc_cur);
+            pc_next = ref_csr.mtvec & ~3u;
+            break;
+        }
+        if (inst == 0x30200073u) {              /* MRET */
+            ref_trap_return(&pc_next);
+            break;
         }
         if (f3 == 0) {
-            /* ECALL and other SYSTEM encodings land here in stage 6a-3;
-             * for now any non-EBREAK f3=0 is rejected. */
+            /* Any other SYSTEM f3=0 encoding is invalid on this
+             * minimal M-mode machine. */
             ref_invalid(pc_cur, inst);
             return;
         }

@@ -457,6 +457,81 @@ static void test_csr(void) {
          CSRRS(A0, 0x7c0, ZERO));
 }
 
+/* Trap + mret round-trips. Each program skips over its handler, sets
+ * mtvec to the handler's absolute address, then executes ecall. The
+ * handler does its work, bumps mepc by 4 (so mret returns to the
+ * instruction AFTER the ecall, not the ecall itself — the spec's
+ * rule that's easy to miss), and returns via mret. The caller lands
+ * on the auto-appended EBREAK and `halt_ret = a0`. */
+static void test_trap(void) {
+    /* Round-trip sanity: ecall reaches the handler, which sets a0=42
+     * and returns; halt_ret should be 42. Handler lives at pmem
+     * offset 0x04; main starts at 0x18 after `J 24`. */
+    TEST("ecall trap round-trip", 42,
+         /* 0x00 */ J(24),                          /* skip to main at 0x18 */
+         /* 0x04 */ ADDI(A0, ZERO, 42),             /* handler */
+         /* 0x08 */ CSRRS(T1, CSR_MEPC, ZERO),
+         /* 0x0c */ ADDI(T1, T1, 4),
+         /* 0x10 */ CSRRW(ZERO, CSR_MEPC, T1),
+         /* 0x14 */ MRET,
+         /* 0x18 */ LUI(T0, 0x80000000),            /* main: build handler addr */
+         /* 0x1c */ ADDI(T0, T0, 4),
+         /* 0x20 */ CSRRW(ZERO, CSR_MTVEC, T0),
+         /* 0x24 */ ECALL                           /* trap; mret returns to 0x28 = EBREAK */
+    );
+
+    /* mcause is 11 for an ECALL-from-M. Handler loads mcause into a0
+     * so the test observes the value that was written on trap entry. */
+    TEST("ecall sets mcause=11", 11,
+         /* 0x00 */ J(24),
+         /* 0x04 */ CSRRS(A0, CSR_MCAUSE, ZERO),    /* handler: a0 = mcause */
+         /* 0x08 */ CSRRS(T1, CSR_MEPC, ZERO),
+         /* 0x0c */ ADDI(T1, T1, 4),
+         /* 0x10 */ CSRRW(ZERO, CSR_MEPC, T1),
+         /* 0x14 */ MRET,
+         /* 0x18 */ LUI(T0, 0x80000000),
+         /* 0x1c */ ADDI(T0, T0, 4),
+         /* 0x20 */ CSRRW(ZERO, CSR_MTVEC, T0),
+         /* 0x24 */ ECALL
+    );
+
+    /* mepc is set to the PC of the ECALL itself (0x80000024 in this
+     * layout), NOT the PC of the following instruction. Handler
+     * reads it back into a0 without bumping, then fixes mepc and
+     * returns. */
+    TEST("ecall saves mepc = pc_of_ecall", 0x80000024u,
+         /* 0x00 */ J(24),
+         /* 0x04 */ CSRRS(A0, CSR_MEPC, ZERO),      /* handler: a0 = mepc */
+         /* 0x08 */ ADDI(T1, A0, 4),                /* advance past ecall */
+         /* 0x0c */ CSRRW(ZERO, CSR_MEPC, T1),
+         /* 0x10 */ MRET,
+         /* 0x14 */ NOP,                            /* pad so main still starts at 0x18 */
+         /* 0x18 */ LUI(T0, 0x80000000),
+         /* 0x1c */ ADDI(T0, T0, 4),
+         /* 0x20 */ CSRRW(ZERO, CSR_MTVEC, T0),
+         /* 0x24 */ ECALL
+    );
+
+    /* mstatus invariant: set MIE=1 before the trap; after mret, MIE
+     * must be 1 again (restored from MPIE). Mask to the MIE bit so
+     * unrelated mstatus bits don't leak into halt_ret. */
+    TEST("mret restores MIE", 8,                     /* bit 3 = 8 */
+         /* 0x00 */ J(20),                           /* skip handler (4 insns) to main at 0x14 */
+         /* 0x04 */ CSRRS(T1, CSR_MEPC, ZERO),       /* handler */
+         /* 0x08 */ ADDI(T1, T1, 4),
+         /* 0x0c */ CSRRW(ZERO, CSR_MEPC, T1),
+         /* 0x10 */ MRET,
+         /* 0x14 */ LUI(T0, 0x80000000),             /* main */
+         /* 0x18 */ ADDI(T0, T0, 4),                 /* handler = 0x80000004 */
+         /* 0x1c */ CSRRW(ZERO, CSR_MTVEC, T0),
+         /* 0x20 */ ADDI(T1, ZERO, 8),               /* t1 = MIE bit */
+         /* 0x24 */ CSRRS(ZERO, CSR_MSTATUS, T1),    /* set MIE=1 */
+         /* 0x28 */ ECALL,
+         /* 0x2c */ CSRRS(A0, CSR_MSTATUS, ZERO),    /* read mstatus back */
+         /* 0x30 */ ANDI(A0, A0, 8)                  /* isolate MIE */
+    );
+}
+
 /* ------------------------------------------------------------------ */
 
 int main(int argc, char *argv[]) {
@@ -475,6 +550,7 @@ int main(int argc, char *argv[]) {
     test_jumps();
     test_load_store();
     test_csr();
+    test_trap();
 
     printf("isa tests: %d passed, %d failed\n", pass_count, fail_count);
     return fail_count == 0 ? 0 : 1;
